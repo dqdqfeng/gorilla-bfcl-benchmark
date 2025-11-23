@@ -1,6 +1,7 @@
 import os
 import random
 import time
+import json
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -131,62 +132,22 @@ class WebSearchAPI:
             - 'href' (str): The URL of the search result.
             - 'body' (str): A brief description or snippet from the search result.
         """
-        backoff = 2  # initial back-off in seconds
-        params = {
-            "engine": "duckduckgo",
-            "q": keywords,
-            "kl": region,
-            "api_key": os.getenv("SERPAPI_API_KEY"),
+        url = "http://unblocker.tyler.svc.lap0.x.ai/search/"
+        payload = {
+            "query": keywords,
+            "amount": 10
         }
 
-        # Infinite retry loop with exponential backoff
-        while True:
-            try:
-                search = GoogleSearch(params)
-                search_results = search.get_dict()
-            except Exception as e:
-                # If the underlying HTTP call raised a 429 we retry, otherwise propagate
-                if "429" in str(e):
-                    wait_time = backoff + random.uniform(0, backoff)
-                    error_block = (
-                        "*" * 100
-                        + f"\n❗️❗️ [WebSearchAPI] Received 429 from SerpAPI. The number of requests sent using this API key exceeds the hourly throughput limit OR your account has run out of searches. Retrying in {wait_time:.1f} seconds…"
-                        + "*" * 100
-                    )
-                    print(error_block)
-                    time.sleep(wait_time)
-                    backoff = min(backoff * 2, 120)  # cap the back-off
-                    continue
-                else:
-                    error_block = (
-                        "*" * 100
-                        + f"\n❗️❗️ [WebSearchAPI] Error from SerpAPI: {str(e)}. This is not a rate-limit error, so it will not be retried."
-                        + "*" * 100
-                    )
-                    print(error_block)
-                    return {"error": str(e)}
-
-            # SerpAPI sometimes returns the error in the payload instead of raising
-            if "error" in search_results and "429" in str(search_results["error"]):
-                wait_time = backoff + random.uniform(0, backoff)
-                error_block = (
-                    "*" * 100
-                    + f"\n❗️❗️ [WebSearchAPI] Received 429 from SerpAPI. The number of requests sent using this API key exceeds the hourly throughput limit OR your account has run out of searches. Retrying in {wait_time:.1f} seconds…"
-                    + "*" * 100
-                )
-                print(error_block)
-                time.sleep(wait_time)
-                backoff = min(backoff * 2, 120)
-                continue
-
-            break  # Success – no rate-limit error detected
-
-        if "organic_results" not in search_results:
+        headers = {
+            "Content-Type": "application/json"
+        }
+        try:
+            response = requests.post(url, headers=headers, json=payload)
+            search_results = json.loads(response.text)['results']
+        except:
             return {
                 "error": "Failed to retrieve the search results from server. Please try again later."
             }
-
-        search_results = search_results["organic_results"]
 
         # Convert the search results to the desired format
         results = []
@@ -195,7 +156,7 @@ class WebSearchAPI:
                 results.append(
                     {
                         "title": result["title"],
-                        "href": result["link"],
+                        "href": result["url"],
                         "body": result["snippet"],
                     }
                 )
@@ -203,7 +164,7 @@ class WebSearchAPI:
                 results.append(
                     {
                         "title": result["title"],
-                        "href": result["link"],
+                        "href": result["url"],
                     }
                 )
 
